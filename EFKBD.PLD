@@ -1,0 +1,223 @@
+Name     EFKBD ;
+PartNo   00 ;
+Date     11.02.2025 ;
+Revision 01 ;
+Designer Engineer ;
+Company  Proeuropa ;
+Assembly None ;
+Location Wien ;
+Device   f1502ispplcc44;
+
+//The statements here are sent to the Atmel Fitter:
+PROPERTY ATMEL { jtag=on }; 
+PROPERTY ATMEL { TMS_pullup=on };
+PROPERTY ATMEL { TDI_pullup=on };
+PROPERTY ATMEL { Preassign=keep };
+
+
+/* *************** INPUT PINS *********************/
+PIN  43 = CLK_;
+PIN  1  = !RESET;
+PIN [37,36,4,2,44,40,41,39] = [A0..7];
+PIN  5  = !M1_B;
+PIN  9  = !WR_B;
+PIN 11  = !RD_B;
+PIN 12  = !IORQ_B;
+PIN 14  = IEI;
+PIN 16  = IEO;
+PIN 18  = RCLK;
+
+/* *************** OUTPUT PINS *********************/
+PIN 6   = !PIO_CE;
+PIN 8   = CLK;
+PIN 34  = !ASTB;
+PIN 33  = RCK;
+PIN 31  = !SCL;
+PIN 19  = !PIO_M1;
+PIN 29  = !OEB;	/* can be removed since always low */
+PIN 28  = DIR;
+PIN 27  = AS; 
+PIN 26  = !RW;
+PIN 25  = !DS;
+PIN 24  = !CS;
+PIN 20  = !IORQ;
+PIN 21  = !RD;
+
+/* *************** PINNODES    *********************/
+PINNODE   =  PIORES;
+PINNODE   =  STBENA;
+
+FIELD  IOADDR = [A0..7];
+
+IORD = !M1_B & IORQ_B & RD_B;
+IOWR = !M1_B & IORQ_B & WR_B;
+
+/* PIO RELATED */
+
+SEL_PIO    = IOADDR:[30..33];
+
+SEL_PIORES = IOADDR:'h'34;     
+/* IN := SET !M1_B LOW := RESET PIO, OUT := RELEASE !M1_B */
+PIORES_ON  = SEL_PIORES & IORD;
+PIORES_OFF = SEL_PIORES & IOWR;
+
+PIORES.AP = PIORES_ON;
+PIORES.AR = RESET;
+PIORES.CK = PIORES_OFF;
+PIORES.D  = 'B'0;
+
+/* ***************************************************** */
+SEL_STBENA = IOADDR:'h'35;	
+/* IN := ENABLE !ASTB, OUT := DISABLE !ASTB */
+STB_ON  = SEL_STBENA & IORD;
+STB_OFF = SEL_STBENA & IOWR;
+
+STBENA.AP = RESET;
+STBENA.AR = STB_OFF;
+STBENA.CK = STB_ON;
+STBENA.D  = 'B'1;
+
+/* *************************************************** */
+SEL_REGRES = IOADDR:'h'36; 
+/* IN := WRITE RCK PULSE, OUT := CLEAR PULSE SHIFT REGISTER */
+SH_CLR_PLS = SEL_REGRES & IOWR;
+SH_RD_PLS  = SEL_REGRES & IORD;
+
+/* OUTPUT SIGNALS */
+/* !PIO_CE, CLK,!ASTB, RCK, !SCL, !PIO_M1, !OEB, DIR, AS, !RW, !DS, !CS, IORQ, !RD */
+
+PIO_CE = SEL_PIO;
+CLK    = CLK_;
+PIO_M1 = RESET # M1_B # PIORES;
+IORQ   = IORQ_B;
+RD     = RD_B;
+
+/* ************************************************** */
+/* CLR SHIFT REGISTER STATE MACHINE 
+   DEFINE MACHINE STATES */
+
+$DEFINE S0 'D'0              
+$DEFINE S1 'D'1
+$DEFINE S2 'D'2
+$DEFINE S3 'D'3
+$DEFINE S4 'D'4
+$DEFINE S5 'D'5
+$DEFINE S6 'D'6
+$DEFINE S7 'D'7
+$DEFINE S8 'D'8
+$DEFINE S9 'D'9
+$DEFINE S10 'D'10
+$DEFINE S11 'D'11
+$DEFINE S12 'D'12
+$DEFINE S13 'D'13
+$DEFINE S14 'D'14
+$DEFINE S15 'D'15
+
+PINNODE        = [C0..2];
+FIELD STATECNT = [C0..2];
+STATECNT.CK    = CLK_;
+
+SEQUENCE STATECNT {
+PRESENT S0
+	IF SH_CLR_PLS NEXT S1;
+	DEFAULT NEXT S0;
+
+PRESENT S1
+	OUT SCL;
+	NEXT S2; 
+
+PRESENT S2
+	OUT SCL OUT RCK;
+	NEXT S3;
+
+PRESENT S3
+	IF STBENA OUT !ASTB;
+	NEXT S4;
+
+PRESENT S4
+	IF STBENA OUT !ASTB;
+	NEXT S0;
+}
+
+/* CREATE !ASTB & RCK PULSE STATE MACHINE */
+
+PINNODE   = [D0..3];
+FIELD STB = [D0..3];
+STB.CK    = CLK_;
+
+SEQUENCE STB {
+
+PRESENT S0
+	IF !RCLK NEXT S1;
+	DEFAULT NEXT S0;
+
+PRESENT S1
+	IF RCLK NEXT S2;
+	DEFAULT NEXT S1;
+
+PRESENT S2
+	NEXT S3;
+
+PRESENT S3
+	IF STBENA OUT RCK;
+	NEXT S4;
+
+PRESENT S4
+	IF STBENA OUT RCK;
+	NEXT S5;
+
+PRESENT S5
+	IF STBENA OUT RCK OUT !ASTB;
+	NEXT S6;
+
+PRESENT S6
+	IF STBENA OUT !ASTB;
+	NEXT S7;
+
+PRESENT S7
+	IF STBENA OUT !ASTB;
+	NEXT S8;
+
+PRESENT S8
+	IF STBENA OUT !ASTB;
+	NEXT S9;
+
+PRESENT S9
+	IF STBENA OUT !ASTB;
+	NEXT S10;
+
+PRESENT S10
+	IF STBENA OUT !ASTB;
+	NEXT S11;
+
+PRESENT S11
+	NEXT S12;
+
+PRESENT S12
+	IF !STBENA OUT STBENA.CK ;
+	NEXT S0;
+
+PRESENT S13
+	NEXT S14;
+
+PRESENT S14
+	IF !STBENA OUT STBENA.CK ;
+	NEXT S0;
+}
+
+/* EF9345 RELATED */
+
+REGSEL = IOADDR:'H'F4;
+REGACC = IOADDR:'H'F5;
+RST    = IOADDR:'H'F6;
+
+AS  =  (IOWR & REGSEL) # (IOWR & RST) # RESET;
+DS  =  IORD & REGACC;
+RW  =  IOWR & REGACC;
+CS  =  REGSEL # REGACC;
+
+/* DATA BUFFER CONTROL */
+BOARD_CE = REGSEL # REGACC # SEL_PIO;
+ 
+DIR = (!M1_B & IORQ_B & RD_B & BOARD_CE) #  (M1_B & IORQ_B & IEI & !IEO); 
+OEB = 'b'1;
